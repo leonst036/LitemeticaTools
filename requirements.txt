@@ -1,0 +1,12 @@
+altgraph==0.17.5
+immutable-views==0.6.1
+litemapy==0.11.0b0
+mcschematic==11.4.4
+nbtlib==2.0.4
+numpy==2.4.4
+packaging==26.2
+pyinstaller==6.20.0
+pyinstaller-hooks-contrib==2026.5
+setuptools==82.0.1
+sv_ttk==2.6.1
+typing_extensions==4.15.0
