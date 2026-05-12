@@ -10,3 +10,4 @@ pyinstaller-hooks-contrib==2026.5
 setuptools==82.0.1
 sv_ttk==2.6.1
 typing_extensions==4.15.0
+reportlab==4.0.0

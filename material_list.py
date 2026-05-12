@@ -2,10 +2,20 @@ import numpy as np
 from litemapy import Schematic, Region
 import nbtlib
 
-def get_material_list(file_path, file_format):
+def get_material_list(file_path, file_format, filters=None):
     """
     Analysiert die Datei und gibt ein Dictionary mit {Block-ID: Anzahl} zurück.
+    filters: Dictionary mit Bool-Werten (ignore_liquids, ignore_helpers)
     """
+    if filters is None:
+        filters = {}
+
+    ignore_liquids = filters.get("ignore_liquids", False)
+    ignore_helpers = filters.get("ignore_helpers", False)
+    
+    liquid_ids = ["minecraft:water", "minecraft:lava", "minecraft:bubble_column"]
+    helper_ids = ["minecraft:dirt", "minecraft:grass_block", "minecraft:scaffolding", "minecraft:cobblestone"]
+
     if file_format == "litematica":
         sch = Schematic.load(file_path)
         material_counts = {}
@@ -13,9 +23,15 @@ def get_material_list(file_path, file_format):
             unique, counts = np.unique(region._Region__blocks, return_counts=True)
             for idx, count in zip(unique, counts):
                 block = region.palette[idx]
-                if block.id == "minecraft:air":
-                    continue
                 name = block.id
+                
+                if name == "minecraft:air":
+                    continue
+                if ignore_liquids and name in liquid_ids:
+                    continue
+                if ignore_helpers and name in helper_ids:
+                    continue
+
                 if name in material_counts:
                     material_counts[name] += int(count)
                 else:
@@ -29,9 +45,15 @@ def get_material_list(file_path, file_format):
         unique, counts = np.unique(region._Region__blocks, return_counts=True)
         for idx, count in zip(unique, counts):
             block = region.palette[idx]
-            if block.id == "minecraft:air":
-                continue
             name = block.id
+            
+            if name == "minecraft:air":
+                continue
+            if ignore_liquids and name in liquid_ids:
+                continue
+            if ignore_helpers and name in helper_ids:
+                continue
+
             if name in material_counts:
                 material_counts[name] += int(count)
             else:

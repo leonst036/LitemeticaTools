@@ -5,64 +5,14 @@ import webbrowser
 from litemapy import Schematic, Region
 import nbtlib
 
-BLOCK_COLORS = {
-    "minecraft:stone": "#7d7d7d",
-    "minecraft:dirt": "#866043",
-    "minecraft:grass_block": "#5e8a39",
-    "minecraft:oak_log": "#5c4a21",
-    "minecraft:spruce_log": "#3c2a11",
-    "minecraft:birch_log": "#dbce9d",
-    "minecraft:oak_planks": "#b8945f",
-    "minecraft:leaves": "#32591d",
-    "minecraft:water": "#2b3bf6",
-    "minecraft:lava": "#d65108",
-    "minecraft:glass": "#a2c6ce",
-    "minecraft:sand": "#dbd3a0",
-    "minecraft:cobblestone": "#666666",
-    "minecraft:bedrock": "#555555",
-    "minecraft:iron_ore": "#888888",
-    "minecraft:gold_ore": "#888888",
-    "minecraft:diamond_ore": "#888888",
-}
-
-def get_block_color(block_id):
-    # Einfaches Matching
-    for key, color in BLOCK_COLORS.items():
-        if key in block_id:
-            return color
-    
-    # Heuristik für bestimmte Kategorien
-    if "log" in block_id or "wood" in block_id:
-        return "#5c4a21"
-    if "planks" in block_id:
-        return "#b8945f"
-    if "leaves" in block_id:
-        return "#32591d"
-    if "glass" in block_id:
-        return "#a2c6ce"
-    if "stone" in block_id or "andesite" in block_id or "diorite" in block_id or "granite" in block_id:
-        return "#7d7d7d"
-    if "sand" in block_id:
-        return "#dbd3a0"
-    if "terracotta" in block_id or "concrete" in block_id:
-        return "#9e624c"
-    
-    # Generischer Hash für alle anderen Blöcke
-    hash_val = hash(block_id)
-    r = (hash_val & 0xFF0000) >> 16
-    g = (hash_val & 0x00FF00) >> 8
-    b = hash_val & 0x0000FF
-    
-    # Vermeide zu dunkle/helle Farben
-    r = min(max(r, 50), 200)
-    g = min(max(g, 50), 200)
-    b = min(max(b, 50), 200)
-    
-    return f"#{r:02x}{g:02x}{b:02x}"
-
 def export_3d_preview(file_path, file_format):
-    blocks_data = [] # [x, y, z, color]
+    blocks_by_id = {}
     
+    def add_block(x, y, z, block_id):
+        if block_id not in blocks_by_id:
+            blocks_by_id[block_id] = []
+        blocks_by_id[block_id].append([x, y, z])
+
     if file_format == "litematica":
         sch = Schematic.load(file_path)
         for r in sch.regions.values():
@@ -75,7 +25,7 @@ def export_3d_preview(file_path, file_format):
                     for z in range(abs(rl)):
                         b = r.getblock(x if rw > 0 else -x, y if rh > 0 else -y, z if rl > 0 else -z)
                         if b.id != "minecraft:air":
-                            blocks_data.append([ox+x, oy+y, oz+z, get_block_color(b.id)])
+                            add_block(ox+x, oy+y, oz+z, b.id)
     elif file_format == "schematica":
         nbt_data = nbtlib.load(file_path)
         region, _ = Region.from_sponge_nbt(nbt_data)
@@ -85,7 +35,9 @@ def export_3d_preview(file_path, file_format):
                 for z in range(abs(region.length)):
                     b = region.getblock(x, y, z)
                     if b.id != "minecraft:air":
-                        blocks_data.append([rx+x, ry+y, rz+z, get_block_color(b.id)])
+                        add_block(rx+x, ry+y, rz+z, b.id)
+                        
+    total_blocks = sum(len(positions) for positions in blocks_by_id.values())
                         
     html_content = f"""
     <!DOCTYPE html>
@@ -94,7 +46,7 @@ def export_3d_preview(file_path, file_format):
         <meta charset="UTF-8">
         <title>3D Vorschau: {os.path.basename(file_path)}</title>
         <style>
-            body {{ margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: sans-serif; }}
+            body {{ margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; }}
             #info {{ position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }}
             canvas {{ display: block; }}
         </style>
@@ -102,16 +54,18 @@ def export_3d_preview(file_path, file_format):
     <body>
         <div id="info">
             <b>{os.path.basename(file_path)}</b><br>
-            Blöcke: {len(blocks_data)}<br>
-            Steuerung: Linksklick (Drehen), Rechtsklick (Verschieben), Scrollrad (Zoom)
+            Blöcke: {total_blocks}<br>
+            Steuerung: Linksklick (Drehen), Rechtsklick (Verschieben), Scrollrad (Zoom)<br>
+            <i>Hinweis: Texturen werden aus dem Internet geladen.</i>
         </div>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
         <script>
-            const blockData = {json.dumps(blocks_data)};
+            const blockData = {json.dumps(blocks_by_id)};
+            const baseUrl = "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.19.2/assets/minecraft/textures/block/";
             
             const scene = new THREE.Scene();
-            scene.background = new THREE.Color('#1a1a1a');
+            scene.background = new THREE.Color('#87CEEB');
             
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             
@@ -121,50 +75,164 @@ def export_3d_preview(file_path, file_format):
             
             const controls = new THREE.OrbitControls(camera, renderer.domElement);
             
-            // Licht
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
             
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
             dirLight.position.set(10, 20, 10);
             scene.add(dirLight);
             
-            // InstancedMesh für Performance
             const geometry = new THREE.BoxGeometry(1, 1, 1);
-            const material = new THREE.MeshLambertMaterial({{ color: 0xffffff }});
-            const instancedMesh = new THREE.InstancedMesh(geometry, material, blockData.length);
+            const textureLoader = new THREE.TextureLoader();
             
-            // Um das Zentrum zu berechnen
             let minX = Infinity, minY = Infinity, minZ = Infinity;
             let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
             
             const dummy = new THREE.Object3D();
-            const color = new THREE.Color();
             
-            for (let i = 0; i < blockData.length; i++) {{
-                const [x, y, z, hex] = blockData[i];
+            Object.keys(blockData).forEach(blockId => {{
+                const positions = blockData[blockId];
                 
-                minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
-                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+                let name = blockId.replace("minecraft:", "");
                 
-                dummy.position.set(x, y, z);
-                dummy.updateMatrix();
+                // Exakte Textur-Mappings für komplexe Blöcke
+                const exact = {{
+                    "grass_block": "grass_block_side",
+                    "podzol": "podzol_side",
+                    "mycelium": "mycelium_side",
+                    "snow": "snow",
+                    "dirt_path": "dirt_path_side",
+                    "water": "water_still",
+                    "lava": "lava_still",
+                    "fire": "fire_0",
+                    "chest": "oak_planks",
+                    "trapped_chest": "oak_planks",
+                    "ender_chest": "obsidian",
+                    "furnace": "furnace_front",
+                    "crafting_table": "crafting_table_front",
+                    "dispenser": "dispenser_front",
+                    "dropper": "dropper_front",
+                    "observer": "observer_front",
+                    "piston": "piston_side",
+                    "sticky_piston": "piston_side",
+                    "pumpkin": "pumpkin_side",
+                    "carved_pumpkin": "pumpkin_side",
+                    "jack_o_lantern": "jack_o_lantern",
+                    "melon": "melon_side",
+                    "hay_block": "hay_block_side",
+                    "bookshelf": "bookshelf",
+                    "loom": "loom_side",
+                    "composter": "composter_side",
+                    "barrel": "barrel_side",
+                    "smoker": "smoker_front",
+                    "blast_furnace": "blast_furnace_front",
+                    "cartography_table": "cartography_table_side2",
+                    "fletching_table": "fletching_table_side",
+                    "smithing_table": "smithing_table_side",
+                    "grindstone": "stone", 
+                    "lectern": "lectern_side",
+                    "stonecutter": "stonecutter_side",
+                    "campfire": "campfire_log_lit",
+                    "soul_campfire": "campfire_log_lit",
+                    "bee_nest": "bee_nest_side",
+                    "beehive": "beehive_side",
+                    "wall_torch": "torch",
+                    "soul_wall_torch": "soul_torch",
+                    "redstone_wall_torch": "redstone_torch",
+                    "redstone_wire": "redstone_dust_dot",
+                    "glass_pane": "glass",
+                    "tall_grass": "tall_grass_top",
+                    "seagrass": "seagrass",
+                    "tall_seagrass": "tall_seagrass_top",
+                    "cake": "cake_side",
+                    "iron_door": "iron_block",
+                    "iron_trapdoor": "iron_block"
+                }};
+
+                if (exact[name]) {{
+                    name = exact[name];
+                }} else {{
+                    // Regex Heuristiken für Treppen, Stufen, Zäune, etc.
+                    name = name.replace("wall_banner", "banner")
+                               .replace("wall_sign", "sign")
+                               .replace(/_pane$/, "")
+                               .replace(/_bed$/, "_wool")
+                               .replace(/_stairs$/, "")
+                               .replace(/_slab$/, "")
+                               .replace(/_fence_gate$/, "")
+                               .replace(/_fence$/, "")
+                               .replace(/_wall$/, "")
+                               .replace(/^potted_/, "")
+                               .replace(/_door$/, "_planks")
+                               .replace(/_trapdoor$/, "_planks")
+                               .replace(/_button$/, "_planks")
+                               .replace(/_pressure_plate$/, "");
+                }}
                 
-                instancedMesh.setMatrixAt(i, dummy.matrix);
-                color.set(hex);
-                instancedMesh.setColorAt(i, color);
+                // Holzarten zu Planken weiterleiten (da "oak" keine Textur ist, sondern "oak_planks")
+                const woods = ["oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "crimson", "warped"];
+                if (woods.includes(name)) name += "_planks";
+                if (name === "stone_brick") name = "stone_bricks";
+                if (name === "red_nether_brick") name = "red_nether_bricks";
+                if (name === "mossy_stone_brick") name = "mossy_stone_bricks";
+                
+                const material = new THREE.MeshLambertMaterial({{ 
+                    color: 0xffffff,
+                    transparent: true,
+                    alphaTest: 0.1 
+                }});
+                
+                const textureUrl = baseUrl + name + ".png";
+                
+                textureLoader.load(
+                    textureUrl,
+                    function (texture) {{
+                        texture.magFilter = THREE.NearestFilter;
+                        texture.minFilter = THREE.NearestFilter;
+                        material.map = texture;
+                        material.needsUpdate = true;
+                    }},
+                    undefined,
+                    function (err) {{
+                        // Besserer Fallback: Eindeutige Farbe berechnen
+                        let hash = 0;
+                        for (let i = 0; i < blockId.length; i++) hash = blockId.charCodeAt(i) + ((hash << 5) - hash);
+                        hash = Math.abs(hash);
+                        const r = (hash & 0xFF0000) >> 16;
+                        const g = (hash & 0x00FF00) >> 8;
+                        const b = hash & 0x0000FF;
+                        material.color.setRGB(
+                            Math.max(50, Math.min(200, r)) / 255,
+                            Math.max(50, Math.min(200, g)) / 255,
+                            Math.max(50, Math.min(200, b)) / 255
+                        );
+                        material.map = null;
+                        material.needsUpdate = true;
+                    }}
+                );
+                
+                const instancedMesh = new THREE.InstancedMesh(geometry, material, positions.length);
+                for (let i = 0; i < positions.length; i++) {{
+                    const [x, y, z] = positions[i];
+                    minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+                    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+                    
+                    dummy.position.set(x, y, z);
+                    dummy.updateMatrix();
+                    instancedMesh.setMatrixAt(i, dummy.matrix);
+                }}
+                scene.add(instancedMesh);
+            }});
+            
+            if (minX !== Infinity) {{
+                const centerX = (minX + maxX) / 2;
+                const centerY = (minY + maxY) / 2;
+                const centerZ = (minZ + maxZ) / 2;
+                
+                controls.target.set(centerX, centerY, centerZ);
+                camera.position.set(centerX + (maxX - minX) * 0.8, centerY + (maxY - minY) * 0.8 + 10, centerZ + (maxZ - minZ) * 0.8);
+                controls.update();
             }}
-            
-            scene.add(instancedMesh);
-            
-            // Camera und Controls zentrieren
-            const centerX = (minX + maxX) / 2;
-            const centerY = (minY + maxY) / 2;
-            const centerZ = (minZ + maxZ) / 2;
-            
-            controls.target.set(centerX, centerY, centerZ);
-            camera.position.set(centerX + (maxX - minX) * 0.8, centerY + (maxY - minY) * 0.8 + 10, centerZ + (maxZ - minZ) * 0.8);
-            controls.update();
             
             window.addEventListener('resize', () => {{
                 camera.aspect = window.innerWidth / window.innerHeight;
