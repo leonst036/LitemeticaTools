@@ -9,11 +9,12 @@ from converter import (
 )
 from material_gui import MaterialListWindow
 from preview import export_3d_preview
+from updater import CURRENT_VERSION
 
 class ConverterGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Litematica <-> Schematica Converter")
+        self.root.title(f"Litematica <-> Schematica Converter v{CURRENT_VERSION}")
         self.root.geometry("650x420")
         self.root.resizable(False, False)
 
